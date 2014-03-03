@@ -577,7 +577,22 @@ ospfs_unlink(struct inode *dirino, struct dentry *dentry)
 static uint32_t
 allocate_block(void)
 {
-	/* EXERCISE: Your code here */
+	uint32_t bitmap_sz = ospfs_super->os_firstinob;
+
+	int i;
+	for (i = OSPFS_FREEMAP_BLK; i < bitmap_sz; i++)
+	{
+		uint32_t *bitmap = ospfs_block(i);
+		int j;
+		for (j = 0; j < 32; j++)
+		{
+			if (!bitvector_test(bitmap, j))
+			{
+				bitvector_set(bitmap, j);
+				return j;
+			}
+		}
+	}
 	return 0;
 }
 
@@ -596,7 +611,12 @@ allocate_block(void)
 static void
 free_block(uint32_t blockno)
 {
-	/* EXERCISE: Your code here */
+	uint32_t bitmap_sz = ospfs_super->os_firstinob;
+	if (blockno < 4 || blockno >= bitmap_sz * 32)
+		return;
+
+	uint32_t *bitmap = ospfs_block(blockno / 32);
+	bitvector_set(bitmap, blockno % 32);	
 }
 
 
@@ -954,27 +974,29 @@ ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *
 	int append = 0;
 	if ((filp->f_flags & O_APPEND) > 0) //append mode
 	{
-		left_in_file = oi->oi_size - *f_pos;
 		append = 1;
+		left_in_file = 0;
 	}
-	else
-		left_in_file = oi->oi_size;
+	left_in_file = oi->oi_size - *f_pos;
 
 	// If the user is writing past the end of the file, change the file's
 	// size to accomodate the request.  (Use change_size().)
+	eprintk("fpos:%d, count:%d, append:%d, lif:%d\n", 
+		(int)*f_pos, (int)count, append, (int)left_in_file);
 	while (count > left_in_file) //writing past eof
 	{
 		new_size = (ospfs_size2nblocks(oi->oi_size) + 1) * 
 			OSPFS_BLKSIZE;
 		retval = change_size(oi, new_size);
 		if(retval != 0) { //change_size returns 0 on success
+			eprintk("fail\n");
 			return ERR_PTR(retval);
 		}
 
 		if (append)
-			left_in_file = oi->oi_size - *f_pos;
-		else
-			left_in_file = oi->oi_size;
+			left_in_file = 0;
+		left_in_file = oi->oi_size - *f_pos;
+		eprintk("left:%d\n", left_in_file);
 	}
 
 	// Copy data block by block
@@ -998,28 +1020,27 @@ ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *
 		// read user space.
 		// Keep track of the number of bytes moved in 'n'.
 		data_offset = *f_pos % OSPFS_BLKSIZE; //block size is 1024 bytes
-
 		n = OSPFS_BLKSIZE - data_offset;
-
-		//Copy bytes either until we hit the end
-		//of the block or satisfy the user
-		if (n > bytes_left_to_copy) {
+		if (n > bytes_left_to_copy)
 			n = bytes_left_to_copy;
-		}
 
 		//Copy_from_user return the number of bytes that could not 
 		//be copied. On success, this will be 0
 		if (copy_from_user(data + data_offset, buffer, n) > 0) {
 			//copy to buffer
+			eprintk("Probs\n");
 			return -EFAULT;
 		}
 
 		buffer += n;
 		amount += n;
 		*f_pos += n;
+		//eprintk("data:%s, amt:%d, cnt:%d\n", data, amount, count);
+		//eprintk("amt:%d, cnt:%d\n", (int)amount, (int)count);
 	}
 
     done:
+	eprintk("amt:%d\n", (int)amount);
 	return (retval >= 0 ? amount : retval);
 }
 
