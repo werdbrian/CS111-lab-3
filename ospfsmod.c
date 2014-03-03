@@ -446,6 +446,7 @@ ospfs_dir_lookup(struct inode *dir, struct dentry *dentry, struct nameidata *ign
 static int
 ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 {
+	eprintk("Readdir\n");
 	struct inode *dir_inode = filp->f_dentry->d_inode;
 	ospfs_inode_t *dir_oi = ospfs_inode(dir_inode->i_ino);
 	uint32_t f_pos = filp->f_pos;
@@ -646,12 +647,11 @@ free_block(uint32_t blockno)
 //		 block, 1 for the second, etc.)
 // Returns: 0 if block index 'b' requires using the doubly indirect
 //	       block, -1 if it does not.
-// EXERCISE: Fill in this function.
 
 static int32_t
 indir2_index(uint32_t b)
 {
-	if ((uint8_t *) ospfs_block(b))
+	if (b >= (OSPFS_NDIRECT + OSPFS_NINDIRECT))
 		return 0;
 	else
 		return -1;
@@ -666,14 +666,16 @@ indir2_index(uint32_t b)
 //	    0 if b is located under the file's first indirect block;
 //	    otherwise, the offset of the relevant indirect block within
 //		the doubly indirect block.
-//
-// EXERCISE: Fill in this function.
 
 static int32_t
 indir_index(uint32_t b)
 {
-	// Your code here.
-	return -1;
+	if (b >= (OSPFS_NDIRECT + OSPFS_NINDIRECT))
+		return b - (OSPFS_NDIRECT + OSPFS_NINDIRECT);
+	else if (b >= OSPFS_NDIRECT)
+		return 0;
+	else
+		return -1;
 }
 
 
@@ -683,14 +685,16 @@ indir_index(uint32_t b)
 // Inputs:  b -- the zero-based index of the file block
 // Returns: the index of block b in the relevant indirect block or the direct
 //	    block array.
-//
-// EXERCISE: Fill in this function.
 
 static int32_t
 direct_index(uint32_t b)
 {
-	// Your code here.
-	return -1;
+	if (b >= (OSPFS_NDIRECT + OSPFS_NINDIRECT))
+		return b - (OSPFS_NDIRECT + OSPFS_NINDIRECT);
+	else if (b >= OSPFS_NDIRECT)
+		return b - OSPFS_NDIRECT;
+	else
+		return b;
 }
 
 
@@ -709,8 +713,6 @@ direct_index(uint32_t b)
 //          fit in oi's data blocks.  If the function returns an error,
 //          then oi->oi_size should remain unchanged. Any newly
 //          allocated blocks should be erased (set to zero).
-//
-// EXERCISE: Finish off this function.
 //
 // Remember that allocating a new data block may require allocating
 // as many as three disk blocks, depending on whether a new indirect
@@ -735,6 +737,7 @@ add_block(ospfs_inode_t *oi)
 	uint32_t *allocated[2] = { 0, 0 };
 
 	/* EXERCISE: Your code here */
+	eprintk("Add not implemented\n");
 	return -EIO; // Replace this line
 }
 
@@ -752,8 +755,6 @@ add_block(ospfs_inode_t *oi)
 //          instance if an indirect block that should be there isn't),
 //          then oi->oi_size should remain unchanged.
 //
-// EXERCISE: Finish off this function.
-//
 // Remember that you must free any indirect and doubly-indirect blocks
 // that are no longer necessary after shrinking the file.  Removing a
 // single data block could result in as many as 3 disk blocks being
@@ -768,6 +769,7 @@ remove_block(ospfs_inode_t *oi)
 	uint32_t n = ospfs_size2nblocks(oi->oi_size);
 
 	/* EXERCISE: Your code here */
+	eprintk("Remove not implemented\n");
 	return -EIO; // Replace this line
 }
 
@@ -805,27 +807,33 @@ remove_block(ospfs_inode_t *oi)
 //   Also: Don't forget to change the size field in the metadata of the file.
 //         (The value that the final add_block or remove_block set it to
 //          is probably not correct).
-//
-//   EXERCISE: Finish off this function.
 
 static int
 change_size(ospfs_inode_t *oi, uint32_t new_size)
 {
 	uint32_t old_size = oi->oi_size;
 	int r = 0;
+	//eprintk("old:%d, new:%d\n", oi->oi_size, new_size);
 
 	while (ospfs_size2nblocks(oi->oi_size) < ospfs_size2nblocks(new_size)) {
-	        /* EXERCISE: Your code here */
-		return -EIO; // Replace this line
+		r = add_block(oi);
+		if (r == -EIO)
+			return r;
+		else if (r == -ENOSPC)
+			new_size = old_size;
 	}
 	while (ospfs_size2nblocks(oi->oi_size) > ospfs_size2nblocks(new_size)) {
-	        /* EXERCISE: Your code here */
-		return -EIO; // Replace this line
+		r = remove_block(oi);
+		if (r == -EIO)
+			return r;
+		else if (r == -ENOSPC)
+			new_size = old_size;
 	}
 
 	/* EXERCISE: Make sure you update necessary file meta data
 	             and return the proper value. */
-	return -EIO; // Replace this line
+	oi->oi_size = new_size;
+	return r;
 }
 
 
@@ -882,6 +890,7 @@ ospfs_notify_change(struct dentry *dentry, struct iattr *attr)
 static ssize_t
 ospfs_read(struct file *filp, char __user *buffer, size_t count, loff_t *f_pos)
 {
+	eprintk("read\n");
 	ospfs_inode_t *oi = ospfs_inode(filp->f_dentry->d_inode->i_ino);
 	int retval = 0;
 	size_t amount = 0;
@@ -981,22 +990,19 @@ ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *
 
 	// If the user is writing past the end of the file, change the file's
 	// size to accomodate the request.  (Use change_size().)
-	eprintk("fpos:%d, count:%d, append:%d, lif:%d\n", 
-		(int)*f_pos, (int)count, append, (int)left_in_file);
+	//eprintk("fpos:%d, count:%d, append:%d, lif:%d\n", 
+	//	(int)*f_pos, (int)count, append, (int)left_in_file);
 	while (count > left_in_file) //writing past eof
 	{
-		new_size = (ospfs_size2nblocks(oi->oi_size) + 1) * 
-			OSPFS_BLKSIZE;
+		new_size = oi->oi_size + count - left_in_file;
 		retval = change_size(oi, new_size);
 		if(retval != 0) { //change_size returns 0 on success
-			eprintk("fail\n");
 			return ERR_PTR(retval);
 		}
 
 		if (append)
 			left_in_file = 0;
 		left_in_file = oi->oi_size - *f_pos;
-		eprintk("left:%d\n", left_in_file);
 	}
 
 	// Copy data block by block
@@ -1028,7 +1034,6 @@ ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *
 		//be copied. On success, this will be 0
 		if (copy_from_user(data + data_offset, buffer, n) > 0) {
 			//copy to buffer
-			eprintk("Probs\n");
 			return -EFAULT;
 		}
 
@@ -1040,7 +1045,6 @@ ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *
 	}
 
     done:
-	eprintk("amt:%d\n", (int)amount);
 	return (retval >= 0 ? amount : retval);
 }
 
