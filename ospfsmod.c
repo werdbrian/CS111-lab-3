@@ -14,7 +14,7 @@
 #include <asm/uaccess.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
-
+#define DEBUG 1
 /****************************************************************************
  * ospfsmod
  *
@@ -77,7 +77,7 @@ static ospfs_direntry_t *find_direntry(ospfs_inode_t *dir_oi, const char *name, 
 // Basic file system type structure
 // (links into Linux's list of file systems it supports)
 static struct file_system_type ospfs_fs_type;
-// Inode and file operations for regular files
+// Inode and file operations for regular filesystems
 static struct inode_operations ospfs_reg_inode_ops;
 static struct file_operations ospfs_reg_file_ops;
 // Inode and file operations for directories
@@ -139,7 +139,7 @@ ospfs_size2nblocks(uint32_t size)
 }
 
 
-// ospfs_block(blockno)
+// 	ospfs_block(blockno)
 //	Use this function to load a block's contents from "disk".
 //
 //   Input:   blockno -- block number
@@ -696,7 +696,11 @@ direct_index(uint32_t b)
 	else
 		return b;
 }
-
+static inline void
+block_mem_clear(uint32_t block_num)
+{
+	memset(ospfs_block(block_num), 0, OSPFS_BLKSIZE);
+}
 
 // add_block(ospfs_inode_t *oi)
 //   Adds a single data block to a file, adding indirect and
@@ -734,10 +738,75 @@ add_block(ospfs_inode_t *oi)
 	uint32_t n = ospfs_size2nblocks(oi->oi_size);
 
 	// keep track of allocations to free in case of -ENOSPC
-	uint32_t *allocated[2] = { 0, 0 };
+	//uint32_t *allocated[2] = { 0, 0 };
 
 	/* EXERCISE: Your code here */
-	eprintk("Add not implemented\n");
+	//eprintk("Add not implemented\n");
+	if (n <= OSPFS_NDIRECT) ///number of blocks we need is <= to file size, we can store directy
+	{
+		uint32_t direct_blocks =  allocate_block();
+		if (direct_blocks == 0)
+		{
+			if (DEBUG) printk("Error allocating direct block, full disk!");			return -ENOSPC;
+		}
+
+		if (n < OSPFS_NDIRECT)
+		{
+			block_mem_clear(direct_blocks); //zero out blocks
+			oi->oi_direct[n] = direct_blocks; //set direct blocks 
+		}
+
+		else if (n == OSPFS_NDIRECT) //filled up all direct blocks
+		{
+			uint32_t indirect_block = allocate_block(); //need to allocate indirect block
+			if (indirect_block == 0)
+			{
+				if (DEBUG) printk("Error allocating indirect block, full disk.");
+				return -ENOSPC;
+			}
+			//allocated[0] = &indirect_block; // for freeing lata if we run out space
+
+			uint32_t new_direct_block = allocate_block(); //allocating new block since we filled up last one
+			if (new_direct_block == 0)
+			{
+				free_block(indirect_block);
+				if (DEBUG) printk("Error allocating new direct block for filesize=10blocks, full disk.");
+				return -ENOSPC;
+				
+			}
+			block_mem_clear(new_direct_block); //zero out blocks before setting them
+			block_mem_clear(indirect_block);
+			oi->oi_indirect = indirect_block;
+			uint32_t * ospfs_i_b = (uint32_t *) ospfs_block(indirect_block);
+			ospfs_i_b[0] = new_direct_block;
+		}
+
+	}
+	else if (n <=OSPFS_NDIRECT + OSPFS_NINDIRECT)
+	{
+		uint32_t indirect_block = allocate_block(); //need to allocate indirect block
+		if (indirect_block == 0)
+		{
+			if (DEBUG) printk("Error allocating indirect block, full disk.");
+			return -ENOSPC;
+		}
+		else if (indir_index(n) == 0 
+			&& n < OSPFS_NDIRECT + OSPFS_NINDIRECT)
+		{
+			
+			oi->oi_indirect = indirect_block;
+			block_mem_clear(indirect_block);
+			uint32_t * ospfs_i_b = (uint32_t *) ospfs_block(indirect_block);
+			int block_index = direct_index(n);
+			ospfs_i_b[block_index] = indirect_block;
+		}
+		else if (n == OSPFS_NDIRECT + OSPFS_NINDIRECT) //out of indirect links
+		{
+			
+
+		}
+	}
+	else //indirect indirect case
 	return -EIO; // Replace this line
 }
 
