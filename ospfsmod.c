@@ -581,19 +581,25 @@ ospfs_unlink(struct inode *dirino, struct dentry *dentry)
 static uint32_t
 allocate_block(void)
 {
-	uint32_t bitmap_sz = ospfs_super->os_firstinob;
+	uint32_t bitmap_sz = ospfs_super->os_nblocks;
+	uint32_t *bitmap = ospfs_block(OSPFS_FREEMAP_BLK);
 	int i;
-	for (i = OSPFS_FREEMAP_BLK; i < bitmap_sz; i++)
+	for (i = 0; i < bitmap_sz / 32; i++)
 	{
-		uint32_t *bitmap = ospfs_block(i);
+		uint32_t *bitvector = &bitmap[i];
 		int j;
+		int blockno;
 		for (j = 0; j < 32; j++)
 		{
-			if (!bitvector_test(bitmap, j))
+			blockno = i*32u + j;
+			if (bitvector_test(bitvector, j))
 			{
-				bitvector_set(bitmap, j);
-				return i*32u + j;
+				bitvector_clear(bitvector, j);
+				//if (DEBUG) eprintk("Allocated block %d\n", blockno);
+				return blockno;
 			}
+			//else
+			//	if (DEBUG) eprintk("Block %d is taken\n", blockno);
 		}
 	}
 	if (DEBUG) eprintk("could not allocate\n");
@@ -615,13 +621,17 @@ allocate_block(void)
 static void
 free_block(uint32_t blockno)
 {
-	uint32_t bitmap_sz = ospfs_super->os_firstinob;
 	uint32_t *bitmap;
-	if (blockno < bitmap_sz + OSPFS_BLKINODES || blockno >= bitmap_sz * 32)
-		return;
+	uint32_t *bitvector;
+	if (blockno < ospfs_super->os_firstinob + OSPFS_BLKINODES 
+		|| blockno >= ospfs_super->os_nblocks)
+	{
+		return; //outisde of allowed range
+	}
 
-	bitmap = ospfs_block(blockno / 32);
-	bitvector_set(bitmap, blockno % 32);	
+	bitmap = ospfs_block(OSPFS_FREEMAP_BLK);
+	bitvector = &bitmap[blockno / 32];
+	bitvector_set(bitvector, blockno % 32);	
 }
 
 
@@ -789,7 +799,16 @@ add_block(ospfs_inode_t *oi)
 		}
 		block_mem_clear(direct_block);
 
-	       			if (indir_index(n) == 0) //data can be stored using indirect link
+		indirect_block = allocate_block(); //need to allocate indirect block
+		if (indirect_block == 0)
+		{
+			if (DEBUG) printk("Error allocating indirect block, full disk.");
+			free_block(direct_block);
+			return -ENOSPC;
+		}
+		block_mem_clear(indirect_block);
+
+		if (indir_index(n) == 0) //data can be stored using indirect link
 		{
 			uint32_t* ospfs_indirect_block = (uint32_t*)ospfs_block(indirect_block);
 			ospfs_indirect_block[direct_index(n)] = direct_block;
@@ -799,15 +818,6 @@ add_block(ospfs_inode_t *oi)
 			uint32_t indirect2_block;
 			uint32_t* ospfs_indirect2_block;
 			uint32_t* ospfs_indirect1_block;
-
-			indirect_block = allocate_block(); //need to allocate indirect block
-			if (indirect_block == 0)
-			{
-				if (DEBUG) printk("Error allocating indirect block, full disk.");
-				free_block(direct_block);
-				return -ENOSPC;
-			}
-			block_mem_clear(indirect_block);
 
 		       	indirect2_block = allocate_block();
 			if (indirect2_block == 0)
@@ -949,6 +959,7 @@ remove_block(ospfs_inode_t *oi)
 	{
 		block_mem_clear(oi->oi_direct[n]);
 		free_block(oi->oi_direct[n]);
+		oi->oi_direct[n] = 0;
 	}
 	oi->oi_size = oi->oi_size - OSPFS_BLKSIZE;
 	return 0;
@@ -995,6 +1006,7 @@ change_size(ospfs_inode_t *oi, uint32_t new_size)
 	uint32_t old_size = oi->oi_size;
 	int r = 0;
 	int res;
+
 	while (ospfs_size2nblocks(oi->oi_size) < ospfs_size2nblocks(new_size)) {
 		res = add_block(oi);
 		if (res == -EIO)
@@ -1018,7 +1030,7 @@ change_size(ospfs_inode_t *oi, uint32_t new_size)
 
 	/* EXERCISE: Make sure you update necessary file meta data
 	             and return the proper value. */
-	if (DEBUG) eprintk("size changed from %d to %d\n", old_size, new_size);
+	//if (DEBUG) eprintk("size changed from %d to %d\n", old_size, new_size);
 	oi->oi_size = new_size;
 	return r;
 }
@@ -1152,21 +1164,28 @@ ospfs_read(struct file *filp, char __user *buffer, size_t count, loff_t *f_pos)
 static ssize_t
 ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *f_pos)
 {
-	ospfs_inode_t *oi = ospfs_inode(filp->f_dentry->d_inode->i_ino);
-	int retval = 0;
-	size_t amount = 0;
 
-	if (DEBUG) eprintk("print cnt %d\n", count);
+	ospfs_inode_t *oi;
+	int retval;
+	size_t amount;
+	size_t left_in_file;
+	size_t new_size;
+	int append;
+
+	oi = ospfs_inode(filp->f_dentry->d_inode->i_ino);
+	retval = 0;
+	amount = 0;
+
+	//if (DEBUG) eprintk("print cnt %d\n", count);
 
 	// Support files opened with the O_APPEND flag.  To detect O_APPEND,
 	// use struct file's f_flags field and the O_APPEND bit.
-	size_t left_in_file;
-	size_t new_size;
-	int append = 0;
+	append = 0;
 	if ((filp->f_flags & O_APPEND) > 0) //append mode
 	{
 		append = 1;
 		left_in_file = 0;
+		*f_pos = oi->oi_size;
 	}
 	left_in_file = oi->oi_size - *f_pos;
 
