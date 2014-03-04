@@ -7,12 +7,12 @@ close FOO;
 
 @tests = (
     # ls of root directory needs some tweaking
-    [ 'ls / | md5sum',
-      "374f503b210360722ae175bf02f94e4c -"
+   [ 'ls / -m',
+      "bin, boot, cow, dev, etc, home, initrd, initrd.img, lib, live_media, media, mnt, opt, proc, root, sbin, srv, sys, tmp, usr, var, vmlinuz"
     ],
     # ls of root with -F flag needs some tweaking
-    [ 'ls -F / | md5sum',
-      "6d824ca9107961ba53cb9ee7e8a7f50e -"
+    [ 'ls -Fm /',
+      "bin/, boot/, cow/, dev/, etc/, home/, initrd/, initrd.img@, lib/, live_media/, media/, mnt/, opt/, proc/, root/, sbin/, srv/, sys/, tmp/, usr/, var/, vmlinuz@"
     ],
     #ls of subdirectory  needs some tweaking
     [ 'ls  base/subdir',
