@@ -736,39 +736,35 @@ add_block(ospfs_inode_t *oi)
 {
 	// current number of blocks in file
 	uint32_t n = ospfs_size2nblocks(oi->oi_size);
-
-	// keep track of allocations to free in case of -ENOSPC
-	//uint32_t *allocated[2] = { 0, 0 };
-
-	/* EXERCISE: Your code here */
-	//eprintk("Add not implemented\n");
-	if (n <= OSPFS_NDIRECT) ///number of blocks we need is <= to file size, we can store directy
+	if (n > OSPFS_MAXFILEBLKS)
 	{
-		uint32_t direct_blocks =  allocate_block();
-		if (direct_blocks == 0)
+		if (DEBUG) printk("File exceeds maxfile storage space.");
+		return -ENOSPC;
+	}
+	if (n <= OSPFS_NDIRECT) ///number of block in the file is <= 10 so we can store directly
 		{
-			if (DEBUG) printk("Error allocating direct block, full disk!");			return -ENOSPC;
+		uint32_t direct_block =  allocate_block();
+		if (direct_block == 0)
+		{
+			if (DEBUG) printk("Error allocating direct block, full disk!");
+			return -ENOSPC;
 		}
 
 		if (n < OSPFS_NDIRECT)
 		{
-			block_mem_clear(direct_blocks); //zero out blocks
-			oi->oi_direct[n] = direct_blocks; //set direct blocks 
+			block_mem_clear(direct_block); //zero out block
+			oi->oi_direct[n] = direct_block; //set direct block
 		}
 
 		else if (n == OSPFS_NDIRECT) //filled up all direct blocks
 		{
 			uint32_t indirect_block = allocate_block(); //need to allocate indirect block
-			uint32_t new_direct_block;
-			uint32_t *ospfs_i_b;
 			if (indirect_block == 0)
 			{
 				if (DEBUG) printk("Error allocating indirect block, full disk.");
 				return -ENOSPC;
 			}
-			//allocated[0] = &indirect_block; // for freeing lata if we run out space
-
-			new_direct_block = allocate_block(); //allocating new block since we filled up last one
+			uint32_t new_direct_block = allocate_block(); //allocating new block since we filled up last one
 			if (new_direct_block == 0)
 			{
 				free_block(indirect_block);
@@ -779,43 +775,103 @@ add_block(ospfs_inode_t *oi)
 			block_mem_clear(new_direct_block); //zero out blocks before setting them
 			block_mem_clear(indirect_block);
 			oi->oi_indirect = indirect_block;
-			ospfs_i_b = (uint32_t *) ospfs_block(indirect_block);
-			ospfs_i_b[0] = new_direct_block;
+			uint32_t * ospfs_indirect_block = (uint32_t *) ospfs_block(indirect_block);
+			ospfs_indirect_block[0] = new_direct_block;
 		}
 
 	}
-	else if (n <=OSPFS_NDIRECT + OSPFS_NINDIRECT)
+	else if (n <=OSPFS_NDIRECT + OSPFS_NINDIRECT) //indirect block
 	{
-		uint32_t indirect_block = allocate_block(); //need to allocate indirect block
-		if (indirect_block == 0)
+		uint32_t indirect_block_content = allocate_block(); //need to allocate indirect block
+		if (indirect_block_content == 0)
 		{
 			if (DEBUG) printk("Error allocating indirect block, full disk.");
 			return -ENOSPC;
 		}
-		else if (indir_index(n) == 0 
-			&& n < OSPFS_NDIRECT + OSPFS_NINDIRECT)
+		if (indir_index(n) == 0) //data can be stored using indirect link
 		{
-			uint32_t *ospfs_i_b;
-			int block_index;
-			
-			oi->oi_indirect = indirect_block;
-			block_mem_clear(indirect_block);
-			ospfs_i_b = (uint32_t *) ospfs_block(indirect_block);
-			block_index = direct_index(n);
-			ospfs_i_b[block_index] = indirect_block;
+			block_mem_clear(indirect_block_content);
+			uint32_t * ospfs_indirect_block = (uint32_t *) ospfs_block(indirect_block);
+			int indirect_block_index = direct_index(n);
+			ospfs_indirect_block[indirect_block_index] = indirect_block_content;
 		}
-		else if (n == OSPFS_NDIRECT + OSPFS_NINDIRECT) //out of indirect links
+		else if (n == OSPFS_NDIRECT + OSPFS_NINDIRECT) //out of indirect links, create double indirect links
 		{
-			
+			uint32_t indirect2_block = allocate_block();
+			if (indirect2_block == 0)
+			{
+				if (DEBUG) printk("Error allocating indirect2 block, full disk.");
+				return -ENOSPC;
+			}
+			uint32_t indirect1_block = allocate_block();
+			if (indirect1_block == 0)
+			{
+				if (DEBUG) printk("Error allocating indirect1 block, full disk.");
+				return -ENOSPC;
+				free_block(indirect2_block); 
+			}
+		    uint32_t indirect2_block_content = allocate_block();
+		    if (indirect2_block_content == 0)
+			{
+				if (DEBUG) printk("Error allocating indirect1 block, full disk.");
+				return -ENOSPC;
+				free_block(indirect2_block); 
+				free_block(indirect1_block); 
+			}
+			block_mem_clear(indirect2_block); //zero out blocks before setting them
+			block_mem_clear(indirect1_block);
+			block_mem_clear(indirect2_block_content);
+			oi->oi_indirect2 = indirect2_block;
+			uint32_t * ospfs_indirect2_block = (uint32_t *) ospfs_block(indirect2_block);
+			ospfs_indirect2_block[0] = indirect1_block;
+			uint32_t * ospfs_indirect1_block = (uint32_t *) ospfs_block(indirect1_block);
+			ospfs_indirect1_block[0] = indirect2_block_content;
 
+		}
+		else if (indir_index(n)>0 && direct_index(n) !=0) //indirect2 block is not full
+		{
+			uint32_t indirect2_block_content = allocate_block();
+			if (indirect2_block_content == 0)
+			{
+				if (DEBUG) printk("Error allocating direct block, full disk.");
+				return -ENOSPC;
+			}
+			block_mem_clear(indirect2_block_content);
+			uint32_t * ospfs_indirect2_block = (uint32_t*)ospfs_block(oi->oi_indirect2);
+			uint32_t * ospfs_indirect1_block = ospfs_indirect2_block[indir_index(n)];
+			ospfs_indirect1_block[0] = indirect2_block_content;
+
+		}
+		else if (indir_index(n)>0 && direct_index(n) ==0) //indirect1 block in indirect2 list is full
+		{
+			uint32_t indirect1_block = allocate_block();
+			if (indirect1_block == 0)
+			{
+				if (DEBUG) printk("Error allocating indirect1 block, full disk.");
+				return -ENOSPC;
+			}
+		    uint32_t indirect2_block_content = allocate_block();
+		    if (indirect2_block_content == 0)
+			{
+				if (DEBUG) printk("Error allocating indirect1 block, full disk.");
+				return -ENOSPC;
+				free_block(indirect1_block); 
+			}
+			block_mem_clear(indirect1_block);
+			block_mem_clear(indirect2_block_content);
+			uint32_t * ospfs_indirect2_block = (uint32_t *) ospfs_block(oi->oi_indirect2);
+			ospfs_indirect2_block[indir_index(n)] = indirect1_block;
+			uint32_t * ospfs_indirect1_block = (uint32_t *) ospfs_block(indirect1_block);
+			ospfs_indirect1_block[0] = indirect2_block_content;
 		}
 	}
-	else //indirect indirect case
-		return -EIO; // Replace this line
-
-	return 0;
+		else
+		{
+			if (DEBUG) printk("Error should never get here.");
+		}
+		oi->oi_size = OSPFS_BLKSIZE * (n+1);
+		return 0;
 }
-
 
 // remove_block(ospfs_inode_t *oi)
 //   Removes a single data block from the end of a file, freeing
