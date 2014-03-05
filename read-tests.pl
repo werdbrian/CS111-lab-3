@@ -7,40 +7,35 @@ close FOO;
 
 @tests = (
     # read first byte of file
-    [ 'diff base/hello.txt test/hello.txt >/dev/null 2>&1 && echo $?',
-      "0"
+    [ 'dd count=1 bs=1 if=./test/pokercats.gif 2>&-',
+      "G"
     ],
     #read the first block of a file
-    [ 'cmp base/pokercats.gif test/pokercats.gif >/dev/null 2>&1 && echo $?',
-      "0"
+    [ 'dd ibs=1024 count=1 if=./test/test1block.txt 2>&-| md5sum',
+      "387820c7cfb039ffeff36b5ddafab2ee -"
     ],
-    #read half of the first block of a file  
-    [ 'ls -l test/pokercats.gif | awk "{ print \$5 }"',
-      "91308"
+    #read half of the first block of a file
+    [ 'dd ibs=1024 bs=512 count=1 if=./test/test1block.txt 2>&-|md5sum ',
+      "afb2de5db24cc249daff0aa8a6614d7c -"
     ],
-
-    # read starting partway through the first block and into part of the next
-    [ 'ls test | dd bs=1 of=test/dir-contents.txt >/dev/null 2>&1; ' .
-      ' touch test/foo test/bar test/baz && '.
-      ' rm    test/foo test/bar test/baz && '.
-      'diff <( ls test ) test/dir-contents.txt',
-      ''
+    #read starting partway through the first block and into part of the next block
+    [ 'dd skip=2 bs=900 if=./base/test1block.txt 2>&- |md5sum',
+      "71b480f8a7729d42e4d026e32d89e5e0 -"
     ],
 
     # read more than one block
-    [ 'rm -f test/dir-contents.txt && ls test | grep dir-contents.txt',
-      ''
+    [ 'dd ibs=1024 count=2 if=./test/test1block.txt 2>&-|md5sum',
+      'b1c6e475dad4172ffc6ddc8cd13d33bc -'
     ],
-
 
     # try to read past the end of a file
-    [ 'echo hello > test/file1 && cat test/file1',
-      'hello'
+    [ 'dd skip=1 count=2 if=./test/hello.txt',
+      "dd: `./base/hello.txt': cannot skip to specified offset"
     ],
     
-    # try to read into an invalid buffer pointer
-    [ 'echo hello > test/file1 ; echo goodbye >> test/file1 && cat test/file1',
-      'hello goodbye'
+    # need to fix   
+    [ 'cat test/a',
+    'cat: test/a: No such file or directory'
     ],
 
 );
