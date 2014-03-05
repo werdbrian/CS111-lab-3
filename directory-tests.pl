@@ -6,26 +6,26 @@ $lines++ while defined($_ = <FOO>);
 close FOO;
 
 @tests = (
-    # ls of root directory needs some tweaking
+    # ls of root directory 
    [ 'ls / -m',
       "bin, boot, cow, dev, etc, home, initrd, initrd.img, lib, live_media, media, mnt, opt, proc, root, sbin, srv, sys, tmp, usr, var, vmlinuz"
     ],
-    # ls of root with -F flag needs some tweaking
+    # ls of root with -F flag n
     [ 'ls -Fm /',
       "bin/, boot/, cow/, dev/, etc/, home/, initrd/, initrd.img@, lib/, live_media/, media/, mnt/, opt/, proc/, root/, sbin/, srv/, sys/, tmp/, usr/, var/, vmlinuz@"
     ],
-    #ls of subdirectory  needs some tweaking
-    [ 'ls  base/subdir',
+    #ls of subdirectory
+    [ 'ls  test/subdir',
       "message.txt"
     ],
 
     #ls of subdirectory using more than one data block placeholder
-    [ "echo aaa",
-      "aaa"
+    [ "ls --block-size=900 test/subdir",
+      "message.txt"
     ],
     #ls of subdirectory using indirect data blocks placeholder
-    [ "echo aaa",
-      "aaa"
+    [ "ls --block-size=90 test/subdir",
+      "message.txt"
     ],
 
 );
