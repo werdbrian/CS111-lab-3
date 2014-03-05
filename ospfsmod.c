@@ -352,8 +352,6 @@ ospfs_delete_dentry(struct dentry *dentry)
 
 /*****************************************************************************
  * DIRECTORY OPERATIONS
- *
- * EXERCISE: Finish 'ospfs_dir_readdir' and 'ospfs_symlink'.
  */
 
 // ospfs_dir_lookup(dir, dentry, ignore)
@@ -442,8 +440,6 @@ ospfs_dir_lookup(struct inode *dir, struct dentry *dentry, struct nameidata *ign
 //
 //   Returns: 1 at end of directory, 0 if filldir returns < 0 before the end
 //     of the directory, and -(error number) on error.
-//
-//   EXERCISE: Finish implementing this function.
 
 static int
 ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
@@ -475,16 +471,26 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 
 		if (f_pos >= OSPFS_MAXFILEBLKS)
 		{
+			if (DEBUG) eprintk("end of listing\n");
 			r = 1;
 			break;
 		}
 		if (od->od_ino == 0)
 		{
+			if (DEBUG) eprintk("empty entry\n");
+			f_pos++;
 			r = 1;
 			break;
 		}
 		ok_so_far = filldir(dirent, od->od_name, strlen(od->od_name), f_pos, 
 			od->od_ino, entry_oi->oi_ftype);
+		if (DEBUG)
+		{
+			if (ok_so_far > 0)
+				eprintk("f_pos:%d, ftype:%d\n", f_pos, entry_oi->oi_ftype);
+			else if (ok_so_far < 0)
+				eprintk("error:%d\n", ok_so_far);
+		}
 		if (ok_so_far < 0)
 			r = ok_so_far;
 		else
@@ -510,6 +516,7 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	}
 	// Save the file position and return!
 	filp->f_pos = f_pos;
+	if (DEBUG) eprintk("f_pos:%d, r:%d\n", f_pos, r);
 	return r;
 }
 
@@ -557,8 +564,6 @@ ospfs_unlink(struct inode *dirino, struct dentry *dentry)
 
 /*****************************************************************************
  * FREE-BLOCK BITMAP OPERATIONS
- *
- * EXERCISE: Implement these functions.
  */
 
 // allocate_block()
@@ -637,8 +642,6 @@ free_block(uint32_t blockno)
 
 /*****************************************************************************
  * FILE OPERATIONS
- *
- * EXERCISE: Finish off change_size, read, and write.
  *
  * The find_*, add_block, and remove_block functions are only there to support
  * the change_size function.  If you prefer to code change_size a different
@@ -1028,8 +1031,6 @@ change_size(ospfs_inode_t *oi, uint32_t new_size)
 		}
 	}
 
-	/* EXERCISE: Make sure you update necessary file meta data
-	             and return the proper value. */
 	//if (DEBUG) eprintk("size changed from %d to %d\n", old_size, new_size);
 	oi->oi_size = new_size;
 	return r;
@@ -1158,13 +1159,10 @@ ospfs_read(struct file *filp, char __user *buffer, size_t count, loff_t *f_pos)
 //   into the file.  Use copy_from_user() to accomplish this. Unlike read(),
 //   where you cannot read past the end of the file, it is OK to write past
 //   the end of the file; this should simply change the file's size.
-//
-//   EXERCISE: Complete this function.
 
 static ssize_t
 ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *f_pos)
 {
-
 	ospfs_inode_t *oi;
 	int retval;
 	size_t amount;
@@ -1367,7 +1365,6 @@ create_blank_direntry(ospfs_inode_t *dir_oi)
 //                             exists in the given 'dir';
 //               -ENOSPC       if the disk is full & the file can't be created;
 //               -EIO          on I/O error.
-//
 
 static int
 ospfs_link(struct dentry *src_dentry, struct inode *dir, struct dentry *dst_dentry) {
@@ -1395,13 +1392,11 @@ ospfs_link(struct dentry *src_dentry, struct inode *dir, struct dentry *dst_dent
 	// Since this is hard link. inode structure are the same for both 
 	// original file and the hard link
 	// We only need to allocate a new directory entry for the hard link.
-
 	new_entry = create_blank_direntry(dir_oi);
 
 	if (IS_ERR(new_entry)) {
 		return PTR_ERR(new_entry);
 	}
-
 	if (new_entry == NULL) {
 		return -EIO;
 	}
@@ -1547,12 +1542,18 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 	uint32_t entry_ino = 0;
        	dir_oi = ospfs_inode(dir->i_ino);
 
-	/* EXERCISE: Your code here. */
-	return -EINVAL;
+	if (dentry->d_name.len > OSPFS_MAXSYMLINKLEN)
+		return -ENAMETOOLONG;
+	if (ospfs_dir_lookup(dir, dentry, NULL) != NULL)
+	{
+		return -EEXIST;
+	}
 
+	entry_ino = find_free_inode();
 	/* Execute this code after your function has successfully created the
 	   file.  Set entry_ino to the created file's inode number before
 	   getting here. */
+	if (entry_ino != 0)
 	{
 		struct inode *i = ospfs_mk_linux_inode(dir->i_sb, entry_ino);
 		if (!i)
@@ -1560,6 +1561,7 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 		d_instantiate(dentry, i);
 		return 0;
 	}
+	return -ENOSPC;
 }
 
 
