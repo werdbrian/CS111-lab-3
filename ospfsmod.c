@@ -449,7 +449,7 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	uint32_t f_pos = filp->f_pos;
 	int r = 0;		/* Error return value, if any */
 	int ok_so_far = 0;	/* Return value from 'filldir' */
-
+	int f_type = 0;
 	// f_pos is an offset into the directory's data, plus two.
 	// The "plus two" is to account for "." and "..".
 	if (r == 0 && f_pos == 0) {
@@ -465,11 +465,20 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	}
 
 	// actual entries
-	while (r == 0 && ok_so_far >= 0 && f_pos >= 2) {
-		ospfs_direntry_t *od = ospfs_inode_data(dir_oi, f_pos * OSPFS_DIRENTRY_SIZE);
+	while (r == 0 && ok_so_far >= 0 && f_pos >= 2 ) {
+		ospfs_direntry_t *od = ospfs_inode_data(dir_oi, (f_pos-2) * OSPFS_DIRENTRY_SIZE);
 		ospfs_inode_t *entry_oi = ospfs_inode(od->od_ino);
-
-		if (f_pos >= OSPFS_MAXFILEBLKS)
+		
+		if(entry_oi->oi_ftype == OSPFS_FTYPE_REG) {
+			f_type = DT_REG;
+		}
+		else if(entry_oi->oi_ftype == OSPFS_FTYPE_DIR){
+			f_type = DT_DIR;
+		} 
+		else if(entry_oi->oi_ftype == OSPFS_FTYPE_SYMLINK){
+			f_type = DT_LNK;
+		}
+		if (f_pos >= (OSPFS_DIRENTRY_SIZE*dir_oi->oi_size)+2)
 		{
 			if (DEBUG) eprintk("end of listing\n");
 			r = 1;
