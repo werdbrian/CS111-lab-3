@@ -15,7 +15,7 @@
 #include <linux/kernel.h>
 #include <linux/sched.h>
 
-#define DEBUG 	1
+#define DEBUG 	0
 
 /****************************************************************************
  * ospfsmod
@@ -487,12 +487,11 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 		if (od->od_ino == 0)
 		{
 			if (DEBUG) eprintk("empty entry\n");
-			f_pos++;
 			r = 1;
 			break;
 		}
 		ok_so_far = filldir(dirent, od->od_name, strlen(od->od_name), f_pos, 
-			od->od_ino, entry_oi->oi_ftype);
+			od->od_ino, f_type);
 		if (DEBUG)
 		{
 			if (ok_so_far > 0)
