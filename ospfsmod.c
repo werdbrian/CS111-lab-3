@@ -15,7 +15,7 @@
 #include <linux/kernel.h>
 #include <linux/sched.h>
 
-#define DEBUG 	0
+#define DEBUG 	1
 
 /****************************************************************************
  * ospfsmod
@@ -1479,7 +1479,7 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
 	entry_ino = find_free_inode();
 	// return inode number if it finds a free inode. return 0 otherwise.	
 	// How do we know if an inode is free? when its link count equals 0.	
-	if(entry_ino == 0) {
+	if (entry_ino == 0) {
 		return -ENOSPC;
 	}
 
@@ -1547,17 +1547,48 @@ static int
 ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 {
 	ospfs_inode_t *dir_oi;
+	ospfs_direntry_t *new_entry = NULL;
+	ospfs_symlink_inode_t *file_oi = NULL;
 	uint32_t entry_ino = 0;
        	dir_oi = ospfs_inode(dir->i_ino);
 
 	if (dentry->d_name.len > OSPFS_MAXSYMLINKLEN)
+	{
+		if (DEBUG) eprintk("Name too long\n");
 		return -ENAMETOOLONG;
+	}
 	if (ospfs_dir_lookup(dir, dentry, NULL) != NULL)
 	{
+		if (DEBUG) eprintk("Name exists already\n");
 		return -EEXIST;
 	}
 
 	entry_ino = find_free_inode();
+	file_oi = (ospfs_symlink_inode_t*)ospfs_inode(entry_ino); //load ospfs_inode structure from disk
+	if (file_oi == NULL) {
+		return -EIO;
+	}
+
+	// Initialize the new inode structure with correct values
+	file_oi->oi_size = strlen(symname); 
+	file_oi->oi_ftype = OSPFS_FTYPE_SYMLINK;
+	file_oi->oi_nlink = 1; //Number of hard links
+	memcpy(file_oi->oi_symlink, symname, strlen(symname));
+
+	// Step 2: Create a new directory entry for new file
+	new_entry = create_blank_direntry(dir_oi); 
+	//create a blank directory entry in that directory
+	//This function returns a pointer to a directory entry which we can 
+	//modify.
+	if(IS_ERR(new_entry)) {
+		return PTR_ERR(new_entry);
+	}
+
+	// Initialize the new directory entry with correct values
+	new_entry->od_ino = entry_ino;
+	memcpy(new_entry->od_name, dentry->d_name.name, dentry->d_name.len);
+	new_entry->od_name[dentry->d_name.len] = '\0';
+
 	/* Execute this code after your function has successfully created the
 	   file.  Set entry_ino to the created file's inode number before
 	   getting here. */
@@ -1565,10 +1596,16 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 	{
 		struct inode *i = ospfs_mk_linux_inode(dir->i_sb, entry_ino);
 		if (!i)
+		{
+			if (DEBUG) eprintk("No memory for inode\n");
 			return -ENOMEM;
+		}
 		d_instantiate(dentry, i);
+
+		if (DEBUG) eprintk("instantiated\n");
 		return 0;
 	}
+	if (DEBUG) eprintk("Could not allocate inode\n");
 	return -ENOSPC;
 }
 
@@ -1600,7 +1637,7 @@ ospfs_follow_link(struct dentry *dentry, struct nameidata *nd)
 
 	path = (char*) dentry->d_name.name;
 	strncpy(firstfive, path, 5);
-	isConditional = (strncmp(path, firstfive, 5) == 0);
+	isConditional = (strncmp("root?", firstfive, 5) == 0);
 	if (isConditional)
 	{
 		int i;
@@ -1618,15 +1655,18 @@ ospfs_follow_link(struct dentry *dentry, struct nameidata *nd)
 
 		if (current->uid == 0) //root
 		{
+			if (DEBUG) eprintk("Conditional %s\n", conditional1);
 			nd_set_link(nd, conditional1);
 		}
 		else
 		{
+			if (DEBUG) eprintk("Conditional %s\n", conditional2);
 			nd_set_link(nd, conditional2);
 		}
 	}
 	else //not conditional
-	{
+	{ 
+		if (DEBUG) eprintk("Not conditional\n");
 		nd_set_link(nd, oi->oi_symlink);
 	}
 	return (void *) 0;
