@@ -478,7 +478,7 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 		else if(entry_oi->oi_ftype == OSPFS_FTYPE_SYMLINK){
 			f_type = DT_LNK;
 		}
-		if (f_pos >= (OSPFS_DIRENTRY_SIZE*dir_oi->oi_size)+2)
+		if (f_pos >= (OSPFS_DIRENTRY_SIZE * dir_oi->oi_size) + 2)
 		{
 			if (DEBUG) eprintk("end of listing\n");
 			r = 1;
@@ -490,8 +490,8 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 			r = 1;
 			break;
 		}
-		ok_so_far = filldir(dirent, od->od_name, strlen(od->od_name), f_pos, 
-			od->od_ino, f_type);
+		ok_so_far = filldir(dirent, od->od_name, strlen(od->od_name), 
+			f_pos, od->od_ino, f_type);
 		if (DEBUG)
 		{
 			if (ok_so_far > 0)
@@ -1592,8 +1592,43 @@ ospfs_follow_link(struct dentry *dentry, struct nameidata *nd)
 	ospfs_symlink_inode_t *oi =
 		(ospfs_symlink_inode_t *) ospfs_inode(dentry->d_inode->i_ino);
 	// Exercise: Your code here.
+	char* path;
+	char firstfive[5];
+	int isConditional;
+	char* conditional1;
+	char* conditional2;
 
-	nd_set_link(nd, oi->oi_symlink);
+	path = (char*) dentry->d_name.name;
+	strncpy(firstfive, path, 5);
+	isConditional = (strncmp(path, firstfive, 5) == 0);
+	if (isConditional)
+	{
+		int i;
+		conditional1 = path + 5;
+		for (i = 5; i < strlen(path); i++)
+		{
+			if (path[i] == ':')
+			{
+				path[i] = 0;
+				break;
+			}
+		}
+		//do we need to null-terminate the second part as well?
+		conditional2 = path + i + 1;
+
+		if (current->uid == 0) //root
+		{
+			nd_set_link(nd, conditional1);
+		}
+		else
+		{
+			nd_set_link(nd, conditional2);
+		}
+	}
+	else //not conditional
+	{
+		nd_set_link(nd, oi->oi_symlink);
+	}
 	return (void *) 0;
 }
 
