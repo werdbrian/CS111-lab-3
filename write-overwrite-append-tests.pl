@@ -7,88 +7,25 @@ close FOO;
 
 @tests = (
     # overwrite the first few bytes of a file
-    [ 'diff base/hello.txt test/hello.txt >/dev/null 2>&1 && echo $?',
-      "0"
-    ],
-    #overwrite the first two blocks of a file1
-    [ 'cmp base/pokercats.gif test/pokercats.gif >/dev/null 2>&1 && echo $?',
-      "0"
-    ],
-    #overwrite the second block of a file                                                            
-    [ 'ls -l test/pokercats.gif | awk "{ print \$5 }"',
-      "91308"
-    ],
-
-    # overwrite the middle part of the first block of a file
-
     [ "echo Bybye | dd bs=1 count=5 of=test/hello.txt conv=notrunc >/dev/null 2>&1 ; cat test/hello.txt",
       "Bybye, world!"
     ],
-    # overwrite the second half of the first block of a file
+    #overwrite the first two blocks of a file1
+    [ "echo je | dd bs=1 count=2 of=test/hello.txt conv=notrunc >/dev/null 2>&1 ; cat test/hello.txt",
+      "jebye, world!"
+    ],
+    #overwrite the second block of a file                                                            
+    [ "echo i | dd bs=1 count=1 seek=1 of=test/hello.txt conv=notrunc >/dev/null 2>&1 ; cat test/hello.txt",
+      "jibye, world!"
+    ],
+    # overwrite the first 5 blocks of a file
     [ "echo Hello | dd bs=1 count=5 of=test/hello.txt conv=notrunc >/dev/null 2>&1 ; cat test/hello.txt",
       "Hello, world!"
     ],
-    # overwrite the second half of the first block and the first half of the second block of a file
-
-    [ "echo gi | dd bs=1 count=2 seek=7 of=test/hello.txt conv=notrunc >/dev/null 2>&1 ; cat test/hello.txt",
-      "Hello, girld!"
-    ],
-    # try to write from an invalid buffer pointer
-    [ "echo worlds galore | dd bs=1 count=13 seek=7 of=test/hello.txt conv=notrunc >/dev/null 2>&1 ; cat test/hello.txt",
-      "Hello, worlds galore"
-    ],
-    
-    [ "echo 'Hello, world!' > test/hello.txt ; cat test/hello.txt",
-      "Hello, world!"
-    ],
-    
-    # create a file
-    [ 'touch test/file1 && echo $?',
-      "0"
-    ],
-
-    # read directory
-    [ 'touch test/dir-contents.txt ; ls test | tee test/dir-contents.txt | grep file1',
-      'file1'
-    ],
-
-    # write files, remove them, then read dir again
-    [ 'ls test | dd bs=1 of=test/dir-contents.txt >/dev/null 2>&1; ' .
-      ' touch test/foo test/bar test/baz && '.
-      ' rm    test/foo test/bar test/baz && '.
-      'diff <( ls test ) test/dir-contents.txt',
-      ''
-    ],
-
-    # remove the last file
-    [ 'rm -f test/dir-contents.txt && ls test | grep dir-contents.txt',
-      ''
-    ],
-
-
-    # write to a file
-    [ 'echo hello > test/file1 && cat test/file1',
-      'hello'
-    ],
     
     # append to a file
-    [ 'echo hello > test/file1 ; echo goodbye >> test/file1 && cat test/file1',
-      'hello goodbye'
-    ],
-
-    # delete a file
-    [ 'rm -f test/file1 && ls test | grep file1',
-      ''
-    ],
-
-    # make a larger file for indirect blocks
-    [ 'yes | head -n 5632 > test/yes.txt && ls -l test/yes.txt | awk \'{ print $5 }\'',
-      '11264'
-    ],
-   
-    # truncate the large file
-    [ 'echo truncernated11 > test/yes.txt | ls -l test/yes.txt | awk \'{ print $5 }\' ; rm test/yes.txt',
-      '15'
+    [ 'echo hello >> test/hello.txt ; cat test/hello.txt',
+      'Hello world! hello'
     ],
 
 );
