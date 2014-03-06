@@ -6,16 +6,28 @@ $lines++ while defined($_ = <FOO>);
 close FOO;
 
 @tests = (
-    # create a symbolic link
-    [ 'ln -s test/hello.txt test/hello2.txt; ls base | grep hello2',
-      "hello2.txt"
+  #test to see if it works outside of file system
+   [ 'ln -s hello.txt base/hello2.txt; cat base/hello2.txt',
+      "Hello, world!"
+    ],
+    #test out symbolic link outside of file system
+    [ 'echo aaa > base/hello.txt; cat base/hello2.txt',
+      "aaa"
+    ],
+    # create a symbolic link inside file system
+    [ 'ln -s hello.txt test/hello2.txt; cat test/hello2.txt',
+      "Hello, world!"
+    ],
+    #test out symbolic link
+    [ 'echo aaa > test/hello2.txt; cat test/hello.txt',
+      "aaa"
     ],
     #delete a symbolic link
-    [ 'unlink test/hello2.txt; ls base | grep hello2',
+    [ 'unlink test/hello2.txt; ls test | grep hello2',
       ""
     ],
     #delete the symbolic link created for us originally when copied from base folder
-    [ 'unlink test/link; ls base | grep link',
+    [ 'unlink test/link; ls test | grep link',
       ""
     ],
 
