@@ -480,25 +480,25 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 		}
 		if (f_pos >= (OSPFS_DIRENTRY_SIZE * dir_oi->oi_size) + 2)
 		{
-			if (DEBUG) eprintk("end of listing\n");
+			//if (DEBUG) eprintk("end of listing\n");
 			r = 1;
 			break;
 		}
 		if (od->od_ino == 0)
 		{
-			if (DEBUG) eprintk("empty entry\n");
+			//if (DEBUG) eprintk("empty entry\n");
 			r = 1;
 			break;
 		}
 		ok_so_far = filldir(dirent, od->od_name, strlen(od->od_name), 
 			f_pos, od->od_ino, f_type);
-		if (DEBUG)
+		/*if (DEBUG)
 		{
 			if (ok_so_far > 0)
 				eprintk("f_pos:%d, ftype:%d\n", f_pos, entry_oi->oi_ftype);
 			else if (ok_so_far < 0)
 				eprintk("error:%d\n", ok_so_far);
-		}
+		}*/
 		if (ok_so_far < 0)
 			r = ok_so_far;
 		else
@@ -524,7 +524,7 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	}
 	// Save the file position and return!
 	filp->f_pos = f_pos;
-	if (DEBUG) eprintk("f_pos:%d, r:%d\n", f_pos, r);
+	//if (DEBUG) eprintk("f_pos:%d, r:%d\n", f_pos, r);
 	return r;
 }
 
@@ -1564,7 +1564,7 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 	}
 
 	entry_ino = find_free_inode();
-	file_oi = (ospfs_symlink_inode_t*)ospfs_inode(entry_ino); //load ospfs_inode structure from disk
+	file_oi = (ospfs_symlink_inode_t*)ospfs_inode(entry_ino);
 	if (file_oi == NULL) {
 		return -EIO;
 	}
@@ -1577,9 +1577,6 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 
 	// Step 2: Create a new directory entry for new file
 	new_entry = create_blank_direntry(dir_oi); 
-	//create a blank directory entry in that directory
-	//This function returns a pointer to a directory entry which we can 
-	//modify.
 	if(IS_ERR(new_entry)) {
 		return PTR_ERR(new_entry);
 	}
@@ -1601,8 +1598,7 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 			return -ENOMEM;
 		}
 		d_instantiate(dentry, i);
-
-		if (DEBUG) eprintk("instantiated\n");
+		//if (DEBUG) eprintk("instantiated\n");
 		return 0;
 	}
 	if (DEBUG) eprintk("Could not allocate inode\n");
@@ -1628,14 +1624,13 @@ ospfs_follow_link(struct dentry *dentry, struct nameidata *nd)
 {
 	ospfs_symlink_inode_t *oi =
 		(ospfs_symlink_inode_t *) ospfs_inode(dentry->d_inode->i_ino);
-	// Exercise: Your code here.
 	char* path;
 	char firstfive[5];
 	int isConditional;
 	char* conditional1;
 	char* conditional2;
 
-	path = (char*) dentry->d_name.name;
+	path = (char*) oi->oi_symlink;
 	strncpy(firstfive, path, 5);
 	isConditional = (strncmp("root?", firstfive, 5) == 0);
 	if (isConditional)

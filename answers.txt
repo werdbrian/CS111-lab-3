@@ -9,13 +9,14 @@
 # If you have any other information you'd like us to know, please add it at the end of the file.
 
 # Partner 1
-Name: 
-Student ID: 
-Email: 
+Name: William Lai
+Student ID: 404138817
+Email: williamlai@ucla.edu
 
 # Partner 2 (if you're working in a team)
-Name: 
-Student ID: 
-Email: 
+Name: Brian Liu
+Student ID: 404354948
+Email: liubrian7@ucla.edu
 
 # Add any other information you'd like us to know below this line.
+Some of the functions were done in Tuan's discussion section.
